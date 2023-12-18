@@ -25,27 +25,32 @@ static const struct gpio_dt_spec btn = GPIO_DT_SPEC_GET(BTN0_NODE, gpios);
 
 class PollClass{
 public:
-    PollClass()
+    PollClass(const struct gpio_dt_spec *btn)
     {
         printf("Initializing poll class\n");
+        
+        btn_dev = btn;
+
         poll_thread_id = k_thread_create(&poll_thread_data,
-                                            poll_thread_stack,
-                                            K_THREAD_STACK_SIZEOF(poll_thread_stack),
-                                            PollClass::poll_thread_handler,
-                                            this, NULL, NULL, POLL_THREAD_PRIORITY,
-                                            0, K_NO_WAIT);
+                                         poll_thread_stack,
+                                         K_THREAD_STACK_SIZEOF(poll_thread_stack),
+                                         PollClass::poll_thread_handler,
+                                         this, NULL, NULL, POLL_THREAD_PRIORITY,
+                                         0, K_NO_WAIT);
 
         k_thread_join(&poll_thread_data,K_FOREVER);
     }
 private:
-    k_tid_t threadId;
+    // Poll thread variables
     struct k_thread poll_thread_data;
     k_tid_t poll_thread_id;
+
+    const struct gpio_dt_spec *btn_dev;
 
     bool btn_prev_state;
 
    /**
-    * @brief  Static bridge function to non static member function.
+    * @brief  Static bridge function to non static member main function.
     * @note   Still dont understand this
     * @param  *object: 
     * @param  *: 
@@ -60,8 +65,8 @@ private:
 
     void main()
     {
-        bool btn_curr_state = gpio_pin_get_dt(&btn);
-        btn_prev_state = gpio_pin_get_dt(&btn);
+        bool btn_curr_state = gpio_pin_get_dt(btn_dev);
+        btn_prev_state = gpio_pin_get_dt(btn_dev);
 
         while (1) {
             // ret = gpio_pin_toggle_dt(&led);
@@ -69,11 +74,10 @@ private:
             //     return 0;
             // }
             
-            btn_curr_state = gpio_pin_get_dt(&btn);
+            btn_curr_state = gpio_pin_get_dt(btn_dev);
             
-            // led_state = !led_state;
-            // printf("LED state: %s\n", led_state ? "ON" : "OFF");
             printf("Button state: %s\n", btn_curr_state ? "ON" : "OFF");
+            // 
 
             btn_prev_state = btn_curr_state;
             k_msleep(SLEEP_TIME_MS);
@@ -150,7 +154,7 @@ int main(void)
     }
 
     ReactClass ledica(&led);
-    PollClass check_gumbek;
+    PollClass check_gumbek(&btn);
     while (true)
     {
         // printf ("Main func\n");
