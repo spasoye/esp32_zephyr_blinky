@@ -8,12 +8,16 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 
-/* 1000 msec = 1 sec */
 #define POLL_STACK_SIZE 500
 #define POLL_THREAD_PRIORITY 5
-#define SLEEP_TIME_MS   1000
-
 K_THREAD_STACK_DEFINE(poll_thread_stack, POLL_STACK_SIZE);
+
+#define REACT_STACK_SIZE 500
+#define REACT_THREAD_PRIORITY 5
+K_THREAD_STACK_DEFINE(react_thread_stack, REACT_STACK_SIZE);
+
+/* 1000 msec = 1 sec */
+#define SLEEP_TIME_MS   1000
 
 /* The devicetree node identifier for the "led0" alias. */
 #define LED0_NODE 	DT_ALIAS(led0)
@@ -101,12 +105,18 @@ public:
 
         k_work_init_delayable(&led_timer, &ReactClass::blink_handler_bridge);
         k_work_reschedule(&led_timer, K_MSEC(timeout_ms));
+        
     }
 
 private:
     struct k_work_delayable led_timer;	
     const struct gpio_dt_spec *led_dev;
 
+    // React thread variables
+    // IF DEFINED BEFORE struct k_work_delayable led_timer PROGRAM FAILS
+    struct k_thread react_thread_data;
+    k_tid_t react_thread_id;
+    
     uint16_t timeout_ms;
     bool led_state;
 
@@ -119,7 +129,6 @@ private:
         }
     }
     
-
     void blink_handler(struct k_work *work)
     {
         int ret;
@@ -127,8 +136,32 @@ private:
         
 
         ret = gpio_pin_toggle_dt(led_dev);
-        printf("LED state: %s\n", led_state ? "ON" : "OFF");
+        //printf("LED state: %s\n", led_state ? "ON" : "OFF");
         k_work_reschedule(&led_timer, K_MSEC(timeout_ms));
+    }
+
+    /**
+    * @brief  Static bridge function to non static member main function.
+    * @note   Still dont understand this
+    * @param  *object: 
+    * @param  *: 
+    * @param  *: 
+    * @retval None
+    */
+    static void react_thread_handler(void *object, void *, void *)
+    {
+        auto threadObject = reinterpret_cast<ReactClass*>(object);
+	    threadObject->main();
+    }
+
+    void main()
+    {
+        // subscribe to zbus
+        while (true)
+        {
+            printf("waiting for zbus packets\n");
+            k_msleep(SLEEP_TIME_MS);
+        }    
     }
 };
 
