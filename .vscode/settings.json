@@ -8,6 +8,18 @@
 
     // File Associations
     "files.associations": {
-        "gpio.h": "c"
+        "gpio.h": "c",
+        "kernel.h": "c",
+        "bit": "cpp",
+        "cstddef": "cpp",
+        "cwchar": "cpp",
+        "memory": "cpp",
+        "type_traits": "cpp",
+        "functional": "cpp",
+        "limits": "cpp",
+        "utility": "cpp",
+        "future": "cpp",
+        "string": "cpp",
+        "format": "cpp"
     }
 }
