@@ -24,16 +24,22 @@ class PollClass{
     // TODO
 };
 
-
 class ReactClass{
 public:
+    /**
+     * @brief  
+     * @note   
+     * @param  *dt_led: pointer to device tree node
+     * @retval 
+     */
     ReactClass(const struct gpio_dt_spec *dt_led)
     {
         this->led_state = false;
-        this->timeout_ms = 12345;
+        this->timeout_ms = 100;
         this->led_dev = dt_led;
 
-        k_work_init_delayable(&led_timer, blink_handler);
+        k_work_init_delayable(&led_timer, &ReactClass::blink_handler_bridge);
+        k_work_reschedule(&led_timer, K_MSEC(timeout_ms));
     }
 
 private:
@@ -45,23 +51,23 @@ private:
 
     // Static function that acts as a bridge to the non-static member function
     static void blink_handler_bridge(struct k_work *work) {
-        ReactClass *reactObj = reinterpret_cast<ReactClass*>(work->node);
-        reactObj->blink_handler(work);
+        // TODO: research this WTF
+        ReactClass *reactObj = reinterpret_cast<ReactClass*>(work);
+        if (reactObj) {
+            reactObj->blink_handler(work);
+        }
     }
+    
 
     void blink_handler(struct k_work *work)
     {
-        ReactClass *reactObj = reinterpret_cast<ReactClass*>(work);
-
         int ret;
         led_state = !led_state;
         
 
         ret = gpio_pin_toggle_dt(led_dev);
-
         printf("LED state: %s\n", led_state ? "ON" : "OFF");
-
-        k_work_reschedule(&led_timer, K_MSEC(500));
+        k_work_reschedule(&led_timer, K_MSEC(timeout_ms));
     }
 };
 
