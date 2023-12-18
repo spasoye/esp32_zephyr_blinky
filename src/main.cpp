@@ -13,7 +13,7 @@
 K_THREAD_STACK_DEFINE(poll_thread_stack, POLL_STACK_SIZE);
 
 #define REACT_STACK_SIZE 500
-#define REACT_THREAD_PRIORITY 5
+#define REACT_THREAD_PRIORITY 4
 K_THREAD_STACK_DEFINE(react_thread_stack, REACT_STACK_SIZE);
 
 /* 1000 msec = 1 sec */
@@ -42,6 +42,10 @@ public:
                                          this, NULL, NULL, POLL_THREAD_PRIORITY,
                                          0, K_NO_WAIT);
 
+    }
+
+    void start(void)
+    {
         k_thread_join(&poll_thread_data,K_FOREVER);
     }
 private:
@@ -57,7 +61,7 @@ private:
     * @brief  Static bridge function to non static member main function.
     * @note   Still dont understand this
     * @param  *object: 
-    * @param  *: 
+    * * @param  *: 
     * @param  *: 
     * @retval None
     */
@@ -80,9 +84,11 @@ private:
             
             btn_curr_state = gpio_pin_get_dt(btn_dev);
             
-            printf("Button state: %s\n", btn_curr_state ? "ON" : "OFF");
-            // 
-
+            if (btn_curr_state != btn_prev_state)
+            {
+                printf("Button state: %s\n", btn_curr_state ? "ON" : "OFF");
+            }
+        
             btn_prev_state = btn_curr_state;
             k_msleep(SLEEP_TIME_MS);
         }
@@ -106,6 +112,18 @@ public:
         k_work_init_delayable(&led_timer, &ReactClass::blink_handler_bridge);
         k_work_reschedule(&led_timer, K_MSEC(timeout_ms));
         
+        // react k_thread initialization
+        react_thread_id = k_thread_create(&react_thread_data,
+                                         react_thread_stack,
+                                         K_THREAD_STACK_SIZEOF(react_thread_stack),
+                                         ReactClass::react_thread_handler,
+                                         this, NULL, NULL, REACT_THREAD_PRIORITY,
+                                         0, K_NO_WAIT);
+    }
+
+    void start(void)
+    {
+        k_thread_join(&react_thread_data,K_FOREVER);
     }
 
 private:
@@ -113,7 +131,7 @@ private:
     const struct gpio_dt_spec *led_dev;
 
     // React thread variables
-    // IF DEFINED BEFORE struct k_work_delayable led_timer PROGRAM FAILS
+    // IF DEFINED BEFORE struct k_work_delayable led_timer PROGRAM FAILS ??
     struct k_thread react_thread_data;
     k_tid_t react_thread_id;
     
@@ -186,8 +204,12 @@ int main(void)
         return 0;
     }
 
-    ReactClass ledica(&led);
     PollClass check_gumbek(&btn);
+    ReactClass ledica(&led);
+    
+    check_gumbek.start();
+    ledica.start();
+
     while (true)
     {
         // printf ("Main func\n");
