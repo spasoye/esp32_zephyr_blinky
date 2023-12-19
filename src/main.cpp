@@ -1,7 +1,12 @@
 /**
- * @brief  
- * @note   
- * @retval 
+ * @file main.cpp
+ * @author Ivan Spasic (ivan@spasoye.com)
+ * @brief porsche ebike performance - Embedded Software Engineer task.
+ * @version 0.1
+ * @date 2023-12-19
+ * 
+ * @copyright Copyright (c) 2023
+ * 
  */
 #include <stdio.h>
 #include <zephyr/kernel.h>
@@ -9,7 +14,7 @@
 #include <zephyr/zbus/zbus.h>
 
 #define POLL_STACK_SIZE 1024
-#define POLL_THREAD_PRIORITY 5
+#define POLL_THREAD_PRIORITY 1
 K_THREAD_STACK_DEFINE(poll_thread_stack, POLL_STACK_SIZE);
 
 /* 1000 msec = 1 sec */
@@ -79,7 +84,7 @@ public:
         k_thread_join(&poll_thread_data,K_FOREVER);
     }
 private:
-    struct pin_status zbus_btn_state;       /* */
+    struct pin_status zbus_btn_state;       /* data to publish to Zbus. */
     
     const struct zbus_channel *zbus_chan;   /* Pointer to Zbus channel. */
     
@@ -108,9 +113,10 @@ private:
 
     /**
      * @brief Main function in the poll thread.
-     * 
-     * Polls the status of button GPIO every 1 second, check if state has 
+     *        Polls the status of button GPIO every 1 second, check if state 
+     *        has changed.
      * changed and publishes 
+     * @retval None
      */
     void main()
     {
@@ -170,7 +176,6 @@ public:
 
         k_work_init_delayable(&led_timer, &ReactClass::blink_handler_bridge);
         k_work_reschedule(&led_timer, K_MSEC(delay_ms));
-
     }
 
     /**
@@ -183,33 +188,26 @@ public:
     {
         const struct pin_status *pin = reinterpret_cast<const struct pin_status*>(zbus_chan_const_msg(chan));
 
-        // if (pin) {
-        //     printf("-> Button state: %s\n -> Changed state: %s /n", pin->value ? "ON" : "OFF", pin->changed ? "YES" : "NO");
-        // } else {
-        //     printf("Failed to cast zbus_chan_const_msg to pin_status*\n");
-        // }
-        // If button changed k_work delay should be increased 
-        // TODO H
+        // Change delay when pressed not released
         if (pin->changed && pin->value){
-            printf("Promjena\n");
-            // increase_delay()
+            increase_delay();
         }
     }
 
 private:
     struct k_work_delayable led_timer;	
     const struct gpio_dt_spec *led_dev;
-
-    // React thread variables
-    // IF DEFINED BEFORE struct k_work_delayable led_timer PROGRAM FAILS ??
-    struct k_thread react_thread_data;
-    k_tid_t react_thread_id;
     
     bool led_state;
 
     volatile uint16_t delay_ms;
     struct k_mutex delay_mutex;
 
+    /**
+     * @brief   Increase blinking delay_ms.
+     * @retval  None
+     */
+    void increase_delay()
     {
         if (k_mutex_lock(&delay_mutex, K_FOREVER) == 0)
         {
@@ -218,32 +216,54 @@ private:
         }
     }
 
-    // Static function that acts as a bridge to the non-static member function
+    /**
+     * @brief   Static function that acts as a bridge to the non-static member 
+     *          function.
+     * 
+     * @param   work 
+     * @retval  None
+     */
     static void blink_handler_bridge(struct k_work *work) {
-        // TODO: WTF research this 
+        // TODO: research this 
         ReactClass *reactObj = reinterpret_cast<ReactClass*>(work);
         if (reactObj) {
             reactObj->blink_handler(work);
         }
     }
     
+    /**
+     * @brief   Blink functionality hanlder.
+     *          Reschedules the timer for the next blink and toggles DT LED     
+     *          node.
+     * 
+     * @param   work Pointer to the work item.
+     * @retval  None
+     */
     void blink_handler(struct k_work *work)
     {
         int ret;
         led_state = !led_state;
 
         ret = gpio_pin_toggle_dt(led_dev);
+
         // critical section
         if (k_mutex_lock(&delay_mutex, K_FOREVER) == 0)
         {
-        k_work_reschedule(&led_timer, K_MSEC(delay_ms));
+            k_work_reschedule(&led_timer, K_MSEC(delay_ms));
             k_mutex_unlock(&delay_mutex);
         }
     }
 };
 
+/**
+ * @brief   Bridge function for calling the zbus_listener_callback from      
+ *          a static context.
+ *
+ * @param   chan Pointer to the ZBus channel.
+ * @retval  None
+ */
 static void listener_callback_bridge(const struct zbus_channel *chan) {
-        ReactClass *react_obj = static_cast<ReactClass*>(zbus_chan_user_data(chan));
+        auto *react_obj = static_cast<ReactClass*>(zbus_chan_user_data(chan));
 
         react_obj->zbus_listener_callback(chan);
 }
@@ -272,8 +292,6 @@ int main(void)
     ReactClass ledica(&led);
 
     check_gumbek.start();
-
-    printf("Tu sam1\n");
 
     ret = zbus_chan_add_obs(&pin_status_chan, &pin_lis, K_FOREVER);
     if (ret != 0)
