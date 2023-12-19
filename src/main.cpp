@@ -194,7 +194,7 @@ public:
             if (pin->value)
             {
                 printf("Button pressed \n");
-                // increase_delay();
+                increase_delay();
             }
         }
     }
