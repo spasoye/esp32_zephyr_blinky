@@ -131,7 +131,6 @@ private:
             // check if value is changed.
             if (btn_curr_state != btn_prev_state)
             {
-                printf("Button state: %s\n", btn_curr_state ? "ON" : "OFF");
                 zbus_btn_state.changed = true;
             }
             else
@@ -188,9 +187,15 @@ public:
     {
         const struct pin_status *pin = reinterpret_cast<const struct pin_status*>(zbus_chan_const_msg(chan));
 
-        // Change delay when pressed not released
-        if (pin->changed && pin->value){
-            increase_delay();
+        if (pin->changed){
+            printf("Zbus listener callback: ");
+            printf("Button state: %s\n", pin->value ? "ON" : "OFF");
+            // Change delay when pressed
+            if (pin->value)
+            {
+                printf("Button pressed \n");
+                // increase_delay();
+            }
         }
     }
 
@@ -200,8 +205,10 @@ private:
     
     bool led_state;
 
-    volatile uint16_t delay_ms;
-    struct k_mutex delay_mutex;
+    volatile uint16_t delay_ms;             /* Current delay in milliseconds    
+                                               for LED blinking.*/
+    struct k_mutex delay_mutex;             /* Mutex for protecting access to  
+                                               delay_ms. */
 
     /**
      * @brief   Increase blinking delay_ms.
