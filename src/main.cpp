@@ -13,27 +13,35 @@
 #define POLL_THREAD_PRIORITY 5
 K_THREAD_STACK_DEFINE(poll_thread_stack, POLL_STACK_SIZE);
 
-#define REACT_STACK_SIZE 500
-#define REACT_THREAD_PRIORITY 4
-K_THREAD_STACK_DEFINE(react_thread_stack, REACT_STACK_SIZE);
-
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS   1000
 
+// Device tree stuff
 /* The devicetree node identifier for the "led0" alias. */
 #define LED0_NODE 	DT_ALIAS(led0)
 /* The devicetree node identifier for the "button0" alias. */
 #define BTN0_NODE	DT_ALIAS(button0)
-
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
 static const struct gpio_dt_spec btn = GPIO_DT_SPEC_GET(BTN0_NODE, gpios);
 
-// zbus pin status
+// ZBUS stuff
+static void listener_callback_bridge(const struct zbus_channel *chan);
 struct pin_status
 {
     bool value;
     bool changed;
 };
+
+ZBUS_CHAN_DEFINE(pin_status_chan,  /* Name */
+		 struct pin_status, /* Message type */
+
+		 NULL,                                 /* Validator */
+		 NULL,                                 /* User data */
+		 ZBUS_OBSERVERS(pin_lis),     /* observers */
+		 ZBUS_MSG_INIT(.value = false, .changed = true) /* Initial value */
+);
+
+ZBUS_LISTENER_DEFINE(pin_lis, listener_callback_bridge);
 
 class PollClass{
 public:
@@ -126,6 +134,7 @@ public:
      */
     ReactClass(const struct gpio_dt_spec *dt_led)
     {
+        printf("Initializing ReactClass\n");
         this->led_state = false;
         this->timeout_ms = 100;
         this->led_dev = dt_led;
@@ -148,10 +157,13 @@ public:
      */
     void zbus_listener_callback(const struct zbus_channel *chan)
     {
-        const struct pin_status *pin = static_cast<const struct pin_status*>(zbus_chan_const_msg(chan));
+        const struct pin_status *pin = reinterpret_cast<const struct pin_status*>(zbus_chan_const_msg(chan));
+        if (pin) {
+            printf("From listener: Button state: %s\n", pin->value ? "ON" : "OFF");
+        } else {
+            printf("Failed to cast zbus_chan_const_msg to pin_status*\n");
+        }
 
-        printf("From listener\n");
-        
         if (pin->changed){
             timeout_ms = timeout_ms + 50;
         }
@@ -221,17 +233,6 @@ static void listener_callback_bridge(const struct zbus_channel *chan) {
         }
     }
 
-ZBUS_CHAN_DEFINE(pin_status_chan,  /* Name */
-		 struct pin_status, /* Message type */
-
-		 NULL,                                 /* Validator */
-		 NULL,                                 /* User data */
-		 ZBUS_OBSERVERS(pin_lis),     /* observers */
-		 ZBUS_MSG_INIT(.value = false, .changed = true) /* Initial value */
-);
-
-ZBUS_LISTENER_DEFINE(pin_lis, listener_callback_bridge);
-
 int main(void)
 {
     int ret;
@@ -252,18 +253,16 @@ int main(void)
         return 0;
     }
 
-    ret = zbus_chan_add_obs(&pin_status_chan, &pin_lis, K_MSEC(200));
-    if (ret != 0)
-    {
-        printf("Add an observer to channel error");
-    }
-
     PollClass check_gumbek(&btn, &pin_status_chan);
     ReactClass ledica(&led);
-    
 
     check_gumbek.start();
 
+    ret = zbus_chan_add_obs(&pin_status_chan, &pin_lis, K_FOREVER);
+    if (ret != 0)
+    {
+        printf("Add an observer to channel error %d \n", ret);
+    }
 
     while (true)
     {
