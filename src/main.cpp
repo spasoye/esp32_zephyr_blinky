@@ -1,9 +1,8 @@
-/*
- * Copyright (c) 2016 Intel Corporation
- *
- * SPDX-License-Identifier: Apache-2.0
+/**
+ * @brief  
+ * @note   
+ * @retval 
  */
-
 #include <stdio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
@@ -43,8 +42,19 @@ ZBUS_CHAN_DEFINE(pin_status_chan,  /* Name */
 
 ZBUS_LISTENER_DEFINE(pin_lis, listener_callback_bridge);
 
+/**
+ * @brief lass for polling button state and publishing it to a Zephyr Zbus 
+ * channel.
+ * Initializes a Zephyr thread to continuously poll the state of a button
+ * and publish the state to a Zbus channel.
+ */
 class PollClass{
 public:
+    /**
+     * @brief Construct a new Poll Class object. 
+     * @param btn Pointer to the GPIO device tree specification for the button. 
+     * @param zbus_chan_arg Pointer to Zbus channel.
+     */
     PollClass(const struct gpio_dt_spec *btn, const struct zbus_channel *zbus_chan_arg)
     {
         printf("Initializing poll class\n");
@@ -60,28 +70,34 @@ public:
                                          0, K_NO_WAIT);
     }
 
+    /**
+     * @brief Starts the PollClass thread.
+     * 
+     */
     void start(void)
     {
         k_thread_join(&poll_thread_data,K_FOREVER);
     }
 private:
-    struct pin_status zbus_btn_state;
+    struct pin_status zbus_btn_state;       /* */
     
-    const struct zbus_channel *zbus_chan;
+    const struct zbus_channel *zbus_chan;   /* Pointer to Zbus channel. */
+    
     // Poll thread variables
-    struct k_thread poll_thread_data;
-    k_tid_t poll_thread_id;
+    struct k_thread poll_thread_data;       /* Poll thread data structure. */
+    k_tid_t poll_thread_id;                 /* Thread ID for poll thread. */
 
-    const struct gpio_dt_spec *btn_dev;
+    const struct gpio_dt_spec *btn_dev;     /* Pointer to GPIO device tree  
+                                                button specification*/
 
-    bool btn_prev_state;
+    bool btn_prev_state;                    /* Previous button state */
 
    /**
     * @brief  Static bridge function to non static member main function.
-    * @note   Still dont understand this
-    * @param  *object: 
-    * * @param  *: 
-    * @param  *: 
+    * @note 
+    * @param  *object Pointer to the PollClass object
+    * @param  * Not used
+    * @param  * Not used 
     * @retval None
     */
     static void poll_thread_handler(void *object, void *, void *)
@@ -90,6 +106,12 @@ private:
 	    threadObject->main();
     }
 
+    /**
+     * @brief Main function in the poll thread.
+     * 
+     * Polls the status of button GPIO every 1 second, check if state has 
+     * changed and publishes 
+     */
     void main()
     {
         bool btn_curr_state = gpio_pin_get_dt(btn_dev);
@@ -100,7 +122,7 @@ private:
             
             zbus_btn_state.value = btn_curr_state;
 
-            // check if value is changed
+            // check if value is changed.
             if (btn_curr_state != btn_prev_state)
             {
                 printf("Button state: %s\n", btn_curr_state ? "ON" : "OFF");
@@ -124,48 +146,50 @@ private:
     }
 };
 
+/**
+ * @brief Class in charge of LED control and ZBus event handling. 
+ * 
+ */
 class ReactClass{
 public:
     /**
-     * @brief  
-     * @note   
-     * @param  *dt_led: pointer to GPIO device tree node
-     * @retval 
+     * @brief  Constructor for the ReactClass.
+     * @note   Initializes led_state, timer delay in ms and DT GPIO node.
+     *         It also setups delay timer and starts it.
+     * @param  *dt_led: pointer to GPIO device tree node for LED.
+     * @retval None
      */
     ReactClass(const struct gpio_dt_spec *dt_led)
     {
         printf("Initializing ReactClass\n");
         this->led_state = false;
-        this->timeout_ms = 100;
+        this->delay_ms = 100;
         this->led_dev = dt_led;
 
         k_work_init_delayable(&led_timer, &ReactClass::blink_handler_bridge);
-        k_work_reschedule(&led_timer, K_MSEC(timeout_ms));
+        k_work_reschedule(&led_timer, K_MSEC(delay_ms));
 
-    }
-
-    void start(void)
-    {
-        k_thread_join(&react_thread_data,K_FOREVER);
     }
 
     /**
-     * @brief  
-     * @note   
+     * @brief  Callback function for handling ZBus events.
+     * @note   Still WIP
      * @param  *chan: 
      * @retval None
      */
     void zbus_listener_callback(const struct zbus_channel *chan)
     {
         const struct pin_status *pin = reinterpret_cast<const struct pin_status*>(zbus_chan_const_msg(chan));
+
         if (pin) {
             printf("From listener: Button state: %s\n", pin->value ? "ON" : "OFF");
         } else {
             printf("Failed to cast zbus_chan_const_msg to pin_status*\n");
         }
-
+        // If button changed k_work delay should be increased 
+        // TODO H
         if (pin->changed){
-            timeout_ms = timeout_ms + 50;
+            delay_ms = delay_ms + 50;
         }
     }
 
@@ -178,7 +202,7 @@ private:
     struct k_thread react_thread_data;
     k_tid_t react_thread_id;
     
-    uint16_t timeout_ms;
+    uint16_t delay_ms;
     bool led_state;
 
     // Static function that acts as a bridge to the non-static member function
@@ -194,44 +218,19 @@ private:
     {
         int ret;
         led_state = !led_state;
-        
 
         ret = gpio_pin_toggle_dt(led_dev);
         //printf("LED state: %s\n", led_state ? "ON" : "OFF");
-        k_work_reschedule(&led_timer, K_MSEC(timeout_ms));
-    }
-
-    /**
-    * @brief  Static bridge function to non static member main function.
-    * @note   Still dont understand this
-    * @param  *object: 
-    * @param  *: 
-    * @param  *: 
-    * @retval None
-    */
-    static void react_thread_handler(void *object, void *, void *)
-    {
-        auto threadObject = reinterpret_cast<ReactClass*>(object);
-	    threadObject->main();
-    }
-
-    void main()
-    {
-        // subscribe to zbus
-        while (true)
-        {
-            printf("waiting for zbus packets\n");
-            k_msleep(SLEEP_TIME_MS);
-        }    
+        k_work_reschedule(&led_timer, K_MSEC(delay_ms));
     }
 };
 
 static void listener_callback_bridge(const struct zbus_channel *chan) {
+        printf("Tu sam2");
         ReactClass *react_obj = static_cast<ReactClass*>(zbus_chan_user_data(chan));
-        if (react_obj) {
-            react_obj->zbus_listener_callback(chan);
-        }
-    }
+        
+        react_obj->zbus_listener_callback(chan);
+}
 
 int main(void)
 {
@@ -258,6 +257,8 @@ int main(void)
 
     check_gumbek.start();
 
+    printf("Tu sam1\n");
+
     ret = zbus_chan_add_obs(&pin_status_chan, &pin_lis, K_FOREVER);
     if (ret != 0)
     {
@@ -266,7 +267,7 @@ int main(void)
 
     while (true)
     {
-        // printf ("Main func\n");
+        printf ("Main func\n");
         k_msleep(SLEEP_TIME_MS);
     }
     
