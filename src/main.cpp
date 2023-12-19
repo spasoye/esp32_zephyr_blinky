@@ -133,7 +133,7 @@ private:
                 zbus_btn_state.changed = false;
             }
         
-            int pub_ret = zbus_chan_pub(zbus_chan, &zbus_btn_state, K_MSEC(SLEEP_TIME_MS));
+            int pub_ret = zbus_chan_pub(zbus_chan, &zbus_btn_state, K_FOREVER);
 
             if (pub_ret != 0)
             {
@@ -141,7 +141,7 @@ private:
             }
 
             btn_prev_state = btn_curr_state;
-            k_msleep(SLEEP_TIME_MS);
+            k_msleep(100);
         }
     }
 };
@@ -181,15 +181,16 @@ public:
     {
         const struct pin_status *pin = reinterpret_cast<const struct pin_status*>(zbus_chan_const_msg(chan));
 
-        if (pin) {
-            printf("From listener: Button state: %s\n", pin->value ? "ON" : "OFF");
-        } else {
-            printf("Failed to cast zbus_chan_const_msg to pin_status*\n");
-        }
+        // if (pin) {
+        //     printf("-> Button state: %s\n -> Changed state: %s /n", pin->value ? "ON" : "OFF", pin->changed ? "YES" : "NO");
+        // } else {
+        //     printf("Failed to cast zbus_chan_const_msg to pin_status*\n");
+        // }
         // If button changed k_work delay should be increased 
         // TODO H
-        if (pin->changed){
-            delay_ms = delay_ms + 50;
+        if (pin->changed && pin->value){
+            printf("Promjena\n");
+            // increase_delay()
         }
     }
 
@@ -202,8 +203,13 @@ private:
     struct k_thread react_thread_data;
     k_tid_t react_thread_id;
     
-    uint16_t delay_ms;
     bool led_state;
+    uint16_t delay_ms;
+
+    // void increase_delay()
+    // {
+    //     printf("increase_delay: delay_ms:\n" );
+    // }
 
     // Static function that acts as a bridge to the non-static member function
     static void blink_handler_bridge(struct k_work *work) {
@@ -220,15 +226,14 @@ private:
         led_state = !led_state;
 
         ret = gpio_pin_toggle_dt(led_dev);
-        //printf("LED state: %s\n", led_state ? "ON" : "OFF");
+        printf("blink_handler: delay_ms: %d\n", delay_ms);
         k_work_reschedule(&led_timer, K_MSEC(delay_ms));
     }
 };
 
 static void listener_callback_bridge(const struct zbus_channel *chan) {
-        printf("Tu sam2");
         ReactClass *react_obj = static_cast<ReactClass*>(zbus_chan_user_data(chan));
-        
+
         react_obj->zbus_listener_callback(chan);
 }
 
