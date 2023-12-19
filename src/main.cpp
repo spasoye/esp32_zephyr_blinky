@@ -8,7 +8,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/zbus/zbus.h>
 
-#define POLL_STACK_SIZE 500
+#define POLL_STACK_SIZE 1024
 #define POLL_THREAD_PRIORITY 5
 K_THREAD_STACK_DEFINE(poll_thread_stack, POLL_STACK_SIZE);
 
@@ -163,8 +163,10 @@ public:
     {
         printf("Initializing ReactClass\n");
         this->led_state = false;
-        this->delay_ms = 100;
+        delay_ms = 100;
         this->led_dev = dt_led;
+
+        k_mutex_init(&delay_mutex);
 
         k_work_init_delayable(&led_timer, &ReactClass::blink_handler_bridge);
         k_work_reschedule(&led_timer, K_MSEC(delay_ms));
@@ -204,12 +206,17 @@ private:
     k_tid_t react_thread_id;
     
     bool led_state;
-    uint16_t delay_ms;
 
-    // void increase_delay()
-    // {
-    //     printf("increase_delay: delay_ms:\n" );
-    // }
+    volatile uint16_t delay_ms;
+    struct k_mutex delay_mutex;
+
+    {
+        if (k_mutex_lock(&delay_mutex, K_FOREVER) == 0)
+        {
+            delay_ms = delay_ms + 100;
+            k_mutex_unlock(&delay_mutex);
+        }
+    }
 
     // Static function that acts as a bridge to the non-static member function
     static void blink_handler_bridge(struct k_work *work) {
@@ -226,8 +233,12 @@ private:
         led_state = !led_state;
 
         ret = gpio_pin_toggle_dt(led_dev);
-        printf("blink_handler: delay_ms: %d\n", delay_ms);
+        // critical section
+        if (k_mutex_lock(&delay_mutex, K_FOREVER) == 0)
+        {
         k_work_reschedule(&led_timer, K_MSEC(delay_ms));
+            k_mutex_unlock(&delay_mutex);
+        }
     }
 };
 
